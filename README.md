@@ -22,14 +22,14 @@ If you want to access the dataset, please send an email to Mr. Hoang for permiss
 
 # Pre-processing
 ## Data Preprocessing
-In our project, we use the model mtcnn has been implemented using Keras for extracting face in images. You can find the model in [here](https://pypi.org/project/mtcnn/). We also provide a method for dividing datasets and creating more data for training from raw data.
+In our project, we use the model mtcnn has been implemented using Keras for extracting face in images. You can find the model in [here](https://pypi.org/project/mtcnn/). We also provide a method for dividing datasets and creating more data for training from raw data. The detail of Data preprocessing [here]()
 
 python align_dataset_mtcnn.py input_dir output_dir --image_size 160 --margin 44 --detect_multiple_faces --threshold
 python create_test_dataset.py input_dir output_dir --size
 python data_generator.py data_dir
 
 # Running training
-Currently, the best results are achieved by training the model using softmax loss. Details on how to train a model using softmax loss can be found on the page Classifier training of Inception-ResNet-v1.
+Currently, the best results are achieved by training the model using softmax loss. Details on how to train a model using softmax loss can be found on the page [Classifier training of Inception-ResNet-v1]().
 
 
 training
