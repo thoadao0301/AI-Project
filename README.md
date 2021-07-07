@@ -1,6 +1,7 @@
 # Finding people in video with MTCNN and Facenet
 This is a project using the Facenet model described in the paper ["FaceNet: A Unified Embedding for Face Recognition and Clustering"](https://arxiv.org/abs/1503.03832) and MTCNN model described in the paper ["Joint Face Detection and Alignment using Multi-task Cascaded Convolutional Networks"](https://arxiv.org/abs/1604.02878) for finding people in video.
 # Compatibility
+```
 python: 3.7
 tensorflow : 2.5.0
 numpy: 1.19.5
@@ -10,6 +11,7 @@ PIL: 8.2.0
 matplotlib: 3.4.2
 sklearn: 0.24.2
 scipy: 1.1.0
+```
 
 # Pre-trained models
 Model training with softmax: [FaceNet-softmax](https://drive.google.com/drive/folders/1pwQ3H4aJ8a6yyJHZkTwtjcL4wYWQb7bn)
