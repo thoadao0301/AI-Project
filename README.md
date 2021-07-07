@@ -32,4 +32,3 @@ Currently, the best results are achieved by training the model using softmax los
 The implement training using triplet loss, we using the code which is implemented by [David Sandberg](https://github.com/davidsandberg). The project can be found in [here](https://github.com/davidsandberg/facenet).
 
 
-# Performance
