@@ -1,6 +1,6 @@
 tensorflow==2.5.0
 numpy==1.19.5
-cv2==4.5.2
+opencv-python==4.5.3.56
 mtcnn==0.1.0
 Pillow
 matplotlib
