@@ -26,10 +26,11 @@ import numpy as np
 import cv2
 import pickle
 import argparse
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import warnings
 warnings.filterwarnings("ignore")
 
+import facenet
 from mtcnn import MTCNN
 from moviepy.editor import *
 from tqdm import tqdm
@@ -73,21 +74,35 @@ def extract_faces(img_array, detector, image_size=160, margin=44):
         # resize pixels to the model size
         face = Image.fromarray(face)
         face = face.resize((image_size,image_size))
+        face = face.convert('RGB')
+        face = np.asarray(face)
         faces_list.append(face)
         bbox.append(face_bbox)
 
     return faces_list, bbox
 
+def load_image(img, image_size, do_prewhiten=True):
+    image = np.zeros((1, image_size, image_size, 3))
+    if img.ndim == 2:
+        img = facenet.to_rgb(img)
+    if do_prewhiten:
+        img = facenet.prewhiten(img)
+    img = facenet.crop(img,False, image_size)
+    img = facenet.flip(img, False)
+    image[0,:,:,:] = img
+    return image
 
-def get_embedding(image,embedder):
+
+
+
+def get_embedding(image_path,sess,image_size=160):
     # Get input and output tensors
-    image = image.convert('RGB')
-    # resize image
-    image = tf.cast(np.array(image), tf.float32) / 255
-    # get embeddings for the faces in an image
-    image = tf.expand_dims(image, axis=0)
-
-    emb_array = embedder.predict(image)
+    images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+    embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+    phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+    images = load_image(image_path, image_size)
+    feed_dict = {images_placeholder: images, phase_train_placeholder: False}
+    emb_array= sess.run(embeddings, feed_dict=feed_dict)
     return emb_array
 
 def draw_bbox(image,bbox,text):
@@ -138,7 +153,7 @@ def out_video(images_video_dir,input_video, output_loc, fps=15):
     os.remove(out_audio)
 
 
-def detect_face(image, id, frame_number,frame_count, fps, model, output_loc ,detector,embedder, export_video, threshold=0.5):
+def detect_face(image, id, frame_number,frame_count, fps, model, output_loc ,detector,sess, export_video, threshold=0.5):
     name_tag = ""
     time_start = []
     # Get model and class_names
@@ -153,7 +168,7 @@ def detect_face(image, id, frame_number,frame_count, fps, model, output_loc ,det
     for i in range(len(faces_list)):
 
         # get embedded image
-        embedded_img = get_embedding(faces_list[i],embedder)
+        embedded_img = get_embedding(faces_list[i],sess)
 
         # get coordinates (x,y) and weight, height (w, h) of the bounding box
         bbox = bboxs_list[i]
@@ -210,76 +225,73 @@ def main(args):
     os.mkdir(output_loc)
 
     with tf.device('/GPU:0'):
+        with tf.Graph().as_default():
+            with tf.Session() as sess:
+                # Load facenet model
+                print('Loading feature extraction model')
+                facenet.load_model(args.model_path)
 
-        # Load facenet model
-        print('Loading feature extraction model')
-        model = tf.keras.models.load_model(args.model_facenet_path)
-        model.load_weights(args.model_weights_path)
-        embedder = tf.keras.models.Model(inputs=[model.input], outputs=[model.layers[-2].output])
+                # Create mtcnn model
+                detector = MTCNN()
 
-        # Create mtcnn model
-        detector = MTCNN()
+                # Create model classifer
+                model, class_names = load_model_classfier(args.model_classfier_path)
 
-        # Create model classifer
-        model, class_names = load_model_classfier(args.model_classfier_path)
+                # Read video
+                cap = cv2.VideoCapture(args.input_video)
 
-        # Read video
-        cap = cv2.VideoCapture(args.input_video)
+                # Get fpt from video
+                fps = cap.get(cv2.CAP_PROP_FPS)
 
-        # Get fpt from video
-        fps = cap.get(cv2.CAP_PROP_FPS)
-
-        # Get frame information
-        if args.frame_skip == 0:
-            frame_skip = int(fps)
-        else:
-            frame_skip = args.frame_skip
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_number = 0
-
-        # Not finding an exact face
-
-
-        # Create folder images for export video
-        if args.export_video:
-            images_video_dir = os.path.join(output_loc, 'images')
-            os.mkdir(images_video_dir)
-        count = frame_skip
-        print('Processing video...')
-        with tqdm(total=(frame_count), file=sys.stdout) as pbar:
-            while cap.isOpened():
-                # Extract the frame
-                ret, frame = cap.read()
-                if ret == True:
-                    frame_number += 1
-                    if frame_number == 1 or frame_number == count:
-                        # Face Detection
-                        detect_face(frame, args.id, frame_number,frame_count, fps,
-                                    (model, class_names), output_loc,
-                                    detector,embedder, args.export_video, args.threshold)
-                        count += frame_skip
-                    elif args.export_video:
-                        img_path = f'{images_video_dir}/{frame_number}.jpg'
-                        cv2.imwrite(img_path, frame)
+                # Get frame information
+                if args.frame_skip == 0:
+                    frame_skip = int(fps)
                 else:
-                    break
-                pbar.update(1)
-        cap.release()
-        print('Successful write .txt file')
+                    frame_skip = args.frame_skip
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                frame_number = 0
 
-        # Export video
-        if args.export_video:
-            print('Rendering video...')
-            out_video(images_video_dir, args.input_video, output_loc, fps)
-            print('Successful export .mp4 file: ')
+                # Not finding an exact face
+
+
+                # Create folder images for export video
+                if args.export_video:
+                    images_video_dir = os.path.join(output_loc, 'images')
+                    os.mkdir(images_video_dir)
+                count = frame_skip
+                print('Processing video...')
+                with tqdm(total=(frame_count), file=sys.stdout) as pbar:
+                    while cap.isOpened():
+                        # Extract the frame
+                        ret, frame = cap.read()
+                        if ret == True:
+                            frame_number += 1
+                            if frame_number == 1 or frame_number == count:
+                                # Face Detection
+                                detect_face(frame, args.id, frame_number,frame_count, fps,
+                                            (model, class_names), output_loc,
+                                            detector,sess, args.export_video, args.threshold)
+                                count += frame_skip
+                            elif args.export_video:
+                                img_path = f'{images_video_dir}/{frame_number}.jpg'
+                                cv2.imwrite(img_path, frame)
+                        else:
+                            break
+                        pbar.update(1)
+                cap.release()
+                print('Successful write .txt file')
+
+                # Export video
+                if args.export_video:
+                    print('Rendering video...')
+                    out_video(images_video_dir, args.input_video, output_loc, fps)
+                    print('Successful export .mp4 file: ')
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('model_facenet_path', type=str,
+    parser.add_argument('model_path', type=str,
                         help='Path to the facenet model training with triplet')
-    parser.add_argument('model_weights_path', type=str,
-                        help='Path to the facenet model weights training with softmax')
     parser.add_argument('model_classfier_path', type=str,
                         help='Path to the classfier model')
     parser.add_argument('input_video', type=str,
